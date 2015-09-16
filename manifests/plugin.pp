@@ -27,6 +27,13 @@
 #   Default value: None
 #   This variable is optional
 #
+# [*source*]
+#   Specify the source of the plugin.
+#   This will copy over the plugin to the node and use it for installation.
+#   Useful for offline installation
+#   Value type is string
+#   This variable is optional
+#
 # [*proxy_host*]
 #   Proxy host to use when installing the plugin
 #   Value type is string
@@ -65,6 +72,7 @@ define elasticsearch::plugin(
     $module_dir  = undef,
     $ensure      = 'present',
     $url         = undef,
+    $source      = undef,
     $proxy_host  = undef,
     $proxy_port  = undef,
 ) {
@@ -100,7 +108,7 @@ define elasticsearch::plugin(
   }
   elsif ($elasticsearch::proxy_url != undef) {
     $proxy_host_from_url = regsubst($elasticsearch::proxy_url, '(http|https)://([^:]+)(|:\d+).+', '\2')
-    $proxy_port_from_url = regsubst($elasticsearch::proxy_url, '(http|https)://([^:]+)?(:(\d+)).+', '\4')
+    $proxy_port_from_url = regsubst($elasticsearch::proxy_url, '(?:http|https)://[^:/]+(?::([0-9]+))?(?:/.*)?', '\1')
     
     # validate parsed values before using them
     if (is_string($proxy_host_from_url) and is_integer($proxy_port_from_url)) {
@@ -111,12 +119,29 @@ define elasticsearch::plugin(
     $proxy = '' # lint:ignore:empty_string_assignment
   }
 
-  if ($url == undef) {
-    $install_cmd = "${elasticsearch::plugintool}${proxy} -install ${name}"
+  if ($source != undef) {
+
+    $filenameArray = split($source, '/')
+    $basefilename = $filenameArray[-1]
+
+    file { "/tmp/${basefilename}":
+      ensure => 'file',
+      source => $source,
+    }
+
+    $real_url = "file:///tmp/${basefilename}"
+  } elsif ($url != undef) {
+    validate_string($url)
+    $real_url = $url
+  } else {
+    $real_url = undef
+  }
+
+  if ($real_url == undef) {
+    $install_cmd = "${elasticsearch::plugintool}${proxy} install ${name}"
     $exec_rets = [0,]
   } else {
-    validate_string($url)
-    $install_cmd = "${elasticsearch::plugintool}${proxy} -install ${name} -url ${url}"
+    $install_cmd = "${elasticsearch::plugintool}${proxy} install ${name} --url ${real_url}"
     $exec_rets = [0,1]
   }
 
@@ -137,7 +162,7 @@ define elasticsearch::plugin(
       }
       file {$name_file_path:
         ensure  => file,
-        content => $name,
+        content => "${name}", # lint:ignore:only_variable_string
         require => Exec["install_plugin_${name}"],
       }
     }
