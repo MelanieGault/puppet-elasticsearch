@@ -52,11 +52,11 @@ hosts.each do |host|
 
     case fact('osfamily')
       when 'RedHat'
-        ext='noarch.rpm'
+        ext='rpm'
       when 'Debian'
         ext='deb'
       when  'Suse'
-        ext='noarch.rpm'
+        ext='rpm'
     end
 
     url = get_url
@@ -81,12 +81,17 @@ hosts.each do |host|
         end
     end
 
+    scp_to(host, "#{files_dir}/elasticsearch-bigdesk.zip", "/tmp/elasticsearch-bigdesk.zip")
+
   end
 
   # on debian/ubuntu nodes ensure we get the latest info
   # Can happen we have stalled data in the images
   if fact('osfamily') == 'Debian'
     on host, "apt-get update"
+  end
+  if fact('osfamily') == 'RedHat'
+    on host, "yum -y update"
   end
 
 end
@@ -106,6 +111,7 @@ RSpec.configure do |c|
 
       copy_hiera_data_to(host, 'spec/fixtures/hiera/hieradata/')
       on host, puppet('module','install','puppetlabs-java'), { :acceptable_exit_codes => [0,1] }
+      on host, puppet('module','install','richardc-datacat'), { :acceptable_exit_codes => [0,1] }
 
       if fact('osfamily') == 'Debian'
         on host, puppet('module','install','puppetlabs-apt', '--version=1.8.0'), { :acceptable_exit_codes => [0,1] }
@@ -118,6 +124,7 @@ RSpec.configure do |c|
         on host, puppet('module', 'install', 'ceritsc-yum'), { :acceptable_exit_codes => [0,1] }
       end
 
+    on(host, 'mkdir -p etc/puppet/modules/another/files/')
     end
   end
 
